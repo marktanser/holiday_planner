@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Holidays">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Holiday Planner</title>
+<meta name="theme-color" content="#2445c4">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Layout: trip summary strip, then a proportional timeline with draggable boundaries, then one card per stop */
+  --bg:#eef1f5;
+  --surface:#ffffff;
+  --ink:#17202c;
+  --muted:#5a6575;
+  --line:#d9dee7;
+  --field:#f5f7fa;
+  --accent:#2445c4;
+  --accent-ink:#ffffff;
+  --display:'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+  --body:'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono:'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+  --radius:12px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f131a; --surface:#171d27; --ink:#e5e9f0; --muted:#97a1b2; --line:#283040;
+    --field:#11161e; --accent:#7f9cff; --accent-ink:#0c1120; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f131a; --surface:#171d27; --ink:#e5e9f0; --muted:#97a1b2; --line:#283040;
+  --field:#11161e; --accent:#7f9cff; --accent-ink:#0c1120; color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.wrap{max-width:980px;margin:0 auto;padding:calc(24px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) calc(64px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));display:flex;flex-direction:column;gap:20px}
+h1,h2{font-family:var(--display);font-weight:700;text-wrap:balance;margin:0;letter-spacing:-.01em}
+h2{font-size:18px}
+.num,.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* iPhone and iPad zoom into any field under 16px, so touch screens get 16px fields */
+@media (pointer: coarse){
+  .field input,.field select,.nights-num,.money input{font-size:16px}
+}
+html{-webkit-text-size-adjust:100%}
+button{-webkit-tap-highlight-color:transparent}
+
+/* Header */
+.top{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between}
+.title-block{display:flex;flex-direction:column;gap:2px;flex:1 1 320px;min-width:0}
+.kicker{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+#tripName{font-family:var(--display);font-weight:700;font-size:clamp(24px,4vw,34px);border:0;background:transparent;padding:2px 0;width:100%;border-bottom:2px dashed transparent;border-radius:0}
+#tripName:hover{border-bottom-color:var(--line)}
+#tripName:focus{outline:none;border-bottom-color:var(--accent)}
+.controls{display:flex;gap:12px;flex-wrap:wrap}
+.field{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:var(--muted)}
+.field input,.field select{font-size:15px;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-height:40px}
+
+/* Summary */
+.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.summary div{padding:14px 16px;display:flex;flex-direction:column;gap:2px;border-left:1px solid var(--line);min-width:0}
+.summary div:first-child{border-left:0}
+.summary dt{font-size:12px;color:var(--muted);font-weight:600}
+.summary dd{margin:0;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:17px;font-weight:500;overflow-wrap:anywhere}
+.summary small{color:var(--muted);font-size:12px}
+@media (max-width:640px){
+  .summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .summary div:nth-child(3){border-left:0}
+  .summary div:nth-child(n+3){border-top:1px solid var(--line)}
+}
+
+/* Timeline */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.tl-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.hint{font-size:13px;color:var(--muted);margin:0}
+.timeline{position:relative;padding:0 6px}
+.track{display:flex;height:64px;border-radius:8px;overflow:hidden;gap:2px;background:var(--line)}
+.seg{flex-basis:0;min-width:0;background:var(--c);color:#fff;padding:8px 10px;display:flex;flex-direction:column;justify-content:center;overflow:hidden;transition:flex-grow .12s ease}
+.seg b{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seg span{font-family:var(--mono);font-size:12px;opacity:.9;white-space:nowrap}
+.bar{position:relative}
+.handles{position:absolute;inset:0;pointer-events:none}
+.legmarks{position:relative;height:22px;margin-bottom:6px}
+.legmark{position:absolute;top:0;transform:translateX(-50%);font-size:11px;font-weight:600;line-height:18px;padding:0 7px;border-radius:999px;background:var(--field);border:1px solid var(--line);color:var(--ink);white-space:nowrap;max-width:110px;overflow:hidden;text-overflow:ellipsis}
+.legmark.first{transform:none}
+.legmark.last{transform:translateX(-100%)}
+.drag-tip{z-index:2}
+
+/* Travel legs */
+.leg{display:grid;grid-template-columns:28px 1fr;gap:10px;padding:0 0 0 14px}
+.leg-line{justify-self:center;width:0;border-left:2px dashed var(--line);min-height:100%}
+.leg-body{display:flex;flex-direction:column;gap:8px;padding:4px 0;min-width:0}
+.leg-title{font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 8px}
+.leg-title b{color:var(--ink);font-weight:600}
+.leg-fields{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:end;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.leg-fields .field select,.leg-fields .field input{min-height:38px;background:var(--field)}
+.leg-items{display:flex;flex-direction:column;gap:8px}
+.filebar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px}
+.file-status{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.file-status::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.file-status.saved::before{background:#2f9e5b}
+.file-status.dirty::before{background:#d08a12}
+.drop-hint{position:fixed;inset:12px;border:3px dashed var(--accent);border-radius:16px;background:color-mix(in srgb,var(--bg) 85%,transparent);display:none;place-items:center;font-family:var(--display);font-size:22px;font-weight:700;color:var(--accent);z-index:10;pointer-events:none}
+body.dropping .drop-hint{display:grid}
+.add-leg{justify-self:start;border:1px dashed var(--line);background:transparent;border-radius:8px;padding:6px 12px;min-height:36px;cursor:pointer;color:var(--muted);font-size:13px;font-weight:500}
+.add-leg:hover{color:var(--ink);border-color:var(--muted)}
+@media (max-width:560px){
+  .leg{padding-left:4px;grid-template-columns:18px 1fr}
+  .leg-fields{grid-template-columns:1fr auto}
+  .leg-fields .details{grid-column:1 / -1;order:3}
+}
+.handle{position:absolute;top:-6px;bottom:-6px;width:28px;margin-left:-14px;pointer-events:auto;cursor:ew-resize;touch-action:none;background:none;border:0;padding:0;display:flex;justify-content:center;align-items:center}
+.handle::before{content:"";width:6px;height:100%;border-radius:4px;background:var(--surface);box-shadow:0 0 0 1px var(--ink),0 2px 6px rgba(0,0,0,.25)}
+.handle::after{content:"";position:absolute;width:2px;height:16px;border-left:1px solid var(--ink);border-right:1px solid var(--ink);opacity:.7}
+.handle.end::before{background:var(--accent);box-shadow:0 0 0 1px var(--accent),0 2px 6px rgba(0,0,0,.25)}
+.handle.end::after{border-color:var(--accent-ink)}
+.handle.dragging::before,.handle:focus-visible::before{width:8px;box-shadow:0 0 0 2px var(--accent),0 2px 8px rgba(0,0,0,.3)}
+.handle:focus-visible{outline:none}
+.axis{position:relative;height:38px;margin-top:6px}
+.tick{position:absolute;top:0;width:1px;height:5px;background:var(--line)}
+.tick.wk{height:9px;background:var(--muted);opacity:.6}
+.axis-lbl{position:absolute;top:12px;font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;transform:translateX(-50%)}
+.axis-lbl.start{transform:none}
+.axis-lbl.endl{transform:translateX(-100%)}
+.axis-lbl.month{top:24px;font-weight:500;color:var(--ink);transform:none}
+.drag-tip{position:absolute;top:-34px;transform:translateX(-50%);background:var(--ink);color:var(--surface);font-family:var(--mono);font-size:12px;padding:4px 8px;border-radius:6px;white-space:nowrap;pointer-events:none}
+
+/* Stops */
+.stops-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 14px;min-height:40px;cursor:pointer;font-weight:500}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.quiet{background:transparent}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap}
+ol.stops{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+.stop{background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--c);border-radius:var(--radius);padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.stop-head{display:flex;align-items:center;gap:10px}
+.badge{flex:none;width:26px;height:26px;border-radius:50%;background:var(--c);color:#fff;font-family:var(--mono);font-size:13px;font-weight:500;display:grid;place-items:center}
+.stop .name{flex:1;min-width:0;font-family:var(--display);font-size:20px;font-weight:700;border:0;border-bottom:2px dashed transparent;background:transparent;padding:2px 0;border-radius:0}
+.stop .name:hover{border-bottom-color:var(--line)}
+.stop .name:focus{outline:none;border-bottom-color:var(--c)}
+.order{display:flex;gap:4px;flex:none}
+.icon-btn{width:36px;height:36px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;display:grid;place-items:center;font-size:16px;line-height:1;color:var(--muted)}
+.icon-btn:hover:not(:disabled){color:var(--ink);border-color:var(--muted)}
+.icon-btn:disabled{opacity:.35;cursor:default}
+.icon-btn.del:hover{color:#c23a3a;border-color:#c23a3a}
+.dates{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-family:var(--mono);font-size:14px;margin:0}
+.dates .arrow{color:var(--muted)}
+.dates .pill{background:var(--field);border:1px solid var(--line);border-radius:999px;padding:2px 10px}
+.nights-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px}
+.nights-row label{font-size:13px;font-weight:600;color:var(--muted)}
+.nights-num{width:72px;text-align:center;font-family:var(--mono);background:var(--field);border:1px solid var(--line);border-radius:8px;padding:6px;min-height:38px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:28px;background:transparent;cursor:pointer;touch-action:pan-y}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:linear-gradient(to right,var(--c) var(--p,0%),var(--line) var(--p,0%))}
+input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--line)}
+input[type=range]::-moz-range-progress{height:6px;border-radius:3px;background:var(--c)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--surface);border:3px solid var(--c);margin-top:-8px;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--surface);border:3px solid var(--c);box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.extras{display:grid;grid-template-columns:auto auto 1fr;gap:12px;align-items:end}
+.extras .field input{min-height:38px;background:var(--field)}
+.money{display:flex;align-items:center;gap:0;background:var(--field);border:1px solid var(--line);border-radius:8px;padding-left:10px}
+.money input{border:0!important;background:transparent!important;width:90px;font-family:var(--mono)}
+.money .cur{font-family:var(--mono);color:var(--muted);font-size:15px}
+.subtotal{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:var(--muted)}
+.subtotal output{font-family:var(--mono);font-size:15px;font-weight:500;color:var(--ink);min-height:38px;display:flex;align-items:center}
+@media (max-width:560px){
+  .extras{grid-template-columns:1fr 1fr}
+  .extras .notes{grid-column:1 / -1}
+  .nights-row{grid-template-columns:1fr auto}
+  .nights-row label{grid-column:1 / -1}
+  .stop .name{font-size:18px}
+}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center}
+.toast{font-size:13px;color:var(--muted);min-height:1em}
+@media (prefers-reduced-motion: reduce){ .seg{transition:none} }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="top">
+    <div class="title-block">
+      <span class="kicker">Holiday planner</span>
+      <label class="sr" for="tripName">Trip name</label>
+      <input id="tripName" autocomplete="off">
+    </div>
+    <div class="controls">
+      <label class="field" for="startDate">Arrive
+        <input type="date" id="startDate">
+      </label>
+      <label class="field" for="endDate">Leave
+        <input type="date" id="endDate">
+      </label>
+      <label class="field" for="currency">Currency
+        <select id="currency">
+          <option value="£">£ GBP</option>
+          <option value="€">€ EUR</option>
+          <option value="$">$ USD</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <div class="filebar">
+    <div class="btn-row">
+      <button class="btn" id="openBtn" type="button">Open plan…</button>
+      <button class="btn primary" id="saveBtn" type="button">Save to file</button>
+      <button class="btn quiet" id="saveAsBtn" type="button" hidden>Save as…</button>
+    </div>
+    <span class="file-status" id="fileStatus" role="status"></span>
+    <input type="file" id="fileInput" accept="application/json,.json" hidden>
+  </div>
+
+  <dl class="summary" aria-live="polite">
+    <div><dt>Dates</dt><dd id="sumDates"></dd><small id="sumCountdown"></small></div>
+    <div><dt>Nights</dt><dd id="sumNights"></dd><small id="sumDays"></small></div>
+    <div><dt>Locations</dt><dd id="sumStops"></dd><small id="sumAvg"></small></div>
+    <div><dt>Total cost</dt><dd id="sumCost"></dd><small id="sumPerNight"></small></div>
+  </dl>
+
+  <section class="card" aria-labelledby="tlTitle">
+    <div class="tl-head">
+      <h2 id="tlTitle">Timeline</h2>
+      <p class="hint">Your arrive and leave dates are fixed. Drag a divider to move nights between neighbouring stops.</p>
+    </div>
+    <div class="timeline" id="timeline">
+      <div class="legmarks" id="legmarks" aria-hidden="true"></div>
+      <div class="bar">
+        <div class="track" id="track"></div>
+        <div class="handles" id="handles"></div>
+      </div>
+      <div class="axis" id="axis"></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="stopsTitle" style="display:flex;flex-direction:column;gap:12px">
+    <div class="stops-head">
+      <h2 id="stopsTitle">Stays and travel</h2>
+      <button class="btn primary" id="addStop" type="button">+ Add location</button>
+    </div>
+    <ol class="stops" id="stops"></ol>
+  </section>
+
+  <div class="foot">
+    <div class="btn-row">
+      <button class="btn" id="copyBtn" type="button">Copy itinerary</button>
+      <button class="btn quiet" id="resetBtn" type="button">Reset to example</button>
+    </div>
+    <span class="toast" id="toast" role="status"></span>
+  </div>
+  <p class="hint" id="saveHint">Your plan also autosaves on this device. Save to a file to keep a copy, move it to another device or share it. You can drop a saved plan file onto this page to open it.</p>
+</main>
+<div class="drop-hint" aria-hidden="true">Drop to open this plan</div>
+
+<script>
+(function(){
+  const DAY = 86400000;
+  const KEY = 'holiday-planner-v1';
+  const PALETTE = ['#2f6bd8','#d9622b','#16927f','#b8418f','#b88a0e','#6a55cc','#3b8f3b','#cc3f4a','#2a8fb0','#8a6a4a'];
+
+  const MODES = {
+    flight:   {label:'Flight',          ph:'Flight number, times, e.g. TP1351 07:05 LGW → LIS', short:'Flight'},
+    train:    {label:'Train',           ph:'Service, times, seats', short:'Train'},
+    car:      {label:'Hire car',        ph:'Pick-up and drop-off, company, booking ref', short:'Hire car'},
+    drive:    {label:'Own car',         ph:'Route, rough driving time', short:'Car'},
+    bus:      {label:'Coach or bus',    ph:'Operator, times', short:'Bus'},
+    ferry:    {label:'Ferry',           ph:'Crossing, times, booking ref', short:'Ferry'},
+    transfer: {label:'Taxi or transfer',ph:'Pick-up time, company', short:'Taxi'},
+    other:    {label:'Other',           ph:'Details', short:'Other'}
+  };
+  const modeOptions = sel => Object.entries(MODES).map(([k, m]) =>
+    `<option value="${k}"${k === sel ? ' selected' : ''}>${m.label}</option>`).join('');
+
+  const fmtShort = new Intl.DateTimeFormat('en-GB',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'});
+  const fmtLong  = new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
+  const fmtDM    = new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',timeZone:'UTC'});
+  const fmtMonth = new Intl.DateTimeFormat('en-GB',{month:'short',year:'numeric',timeZone:'UTC'});
+
+  const uid = () => Math.random().toString(36).slice(2,9);
+  const parseISO = s => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s||''); return m ? Date.UTC(+m[1],m[2]-1,+m[3]) : null; };
+  const toISO = t => new Date(t).toISOString().slice(0,10);
+  const todayUTC = () => { const d = new Date(); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); };
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const money = (n, cur) => cur + Math.round(n).toLocaleString('en-GB');
+  const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+
+  function example(){
+    return {
+      name: 'Portugal & Spain, spring 2027',
+      start: '2027-05-15',
+      end: '2027-05-28',
+      currency: '£',
+      returnLegs: [{mode:'transfer', details:'Metro to Barajas T4', cost:5}, {mode:'flight', details:'MAD → LGW, evening', cost:110}],
+      stops: [
+        {id:uid(), name:'Lisbon',        nights:4, cost:140, notes:'Alfama, Belém, day trip to Sintra', color:PALETTE[0],
+          legs:[{mode:'train', details:'Gatwick Express to the airport', cost:22}, {mode:'flight', details:'LGW → LIS, morning', cost:120}]},
+        {id:uid(), name:'Porto',         nights:3, cost:115, notes:'Port lodges in Gaia', color:PALETTE[1],
+          legs:[{mode:'train', details:'Alfa Pendular from Santa Apolónia, about 3 hours', cost:35}]},
+        {id:uid(), name:'Douro Valley',  nights:2, cost:180, notes:'Quinta stay, river cruise', color:PALETTE[2],
+          legs:[{mode:'car', details:'Pick up in Porto, return at Porto airport', cost:160}]},
+        {id:uid(), name:'Madrid',        nights:4, cost:150, notes:'Prado, Retiro Park', color:PALETTE[3],
+          legs:[{mode:'flight', details:'OPO → MAD', cost:90}, {mode:'transfer', details:'Taxi to the hotel', cost:30}]}
+      ]
+    };
+  }
+  function load(){
+    try {
+      const s = JSON.parse(localStorage.getItem(KEY));
+      if (s && Array.isArray(s.stops) && s.stops.length) return s;
+    } catch(e){}
+    return null;
+  }
+  function persistLocal(){
+    try {
+      localStorage.setItem(KEY, JSON.stringify(state));
+      localStorage.setItem(KEY + '-file', JSON.stringify({fileName, dirty}));
+    } catch(e){}
+  }
+  function save(){ dirty = true; persistLocal(); showStatus(); }
+
+  // File state: which file the plan came from or was saved to, and whether it has changed since.
+  let fileHandle = null, fileName = null, dirty = false, savedAt = null, savedHow = 'saved';
+  try {
+    const f = JSON.parse(localStorage.getItem(KEY + '-file'));
+    if (f && typeof f.fileName === 'string'){ fileName = f.fileName; dirty = !!f.dirty; savedHow = 'last'; }
+  } catch(e){}
+
+  let state = load() || example();
+
+  const sumNights = () => state.stops.reduce((n, s) => n + s.nights, 0);
+
+  // Grow or shrink the trip to newTotal nights, changing the last stop (or the first, when atStart).
+  function resizeTotal(newTotal, atStart){
+    const s = state.stops;
+    let diff = newTotal - sumNights();
+    const order = s.map((_, i) => i);
+    if (!atStart) order.reverse();
+    if (diff > 0) s[order[0]].nights += diff;
+    for (const j of order){
+      if (diff >= 0) break;
+      const take = Math.min(-diff, s[j].nights - 1);
+      s[j].nights -= take; diff += take;
+    }
+  }
+
+  // Set one stop's nights while keeping the trip length fixed. Nights come from (or go to)
+  // the following stops first, nearest first, then the earlier ones.
+  function rebalance(idx, want){
+    const s = state.stops, n = s.length, total = sumNights();
+    want = Math.max(1, Math.min(total - (n - 1), want));
+    let delta = want - s[idx].nights;
+    if (!delta) return;
+    s[idx].nights = want;
+    const order = [];
+    for (let i = idx + 1; i < n; i++) order.push(i);
+    for (let i = idx - 1; i >= 0; i--) order.push(i);
+    if (delta < 0){ s[order[0]].nights -= delta; return; }
+    for (const j of order){
+      const take = Math.min(delta, s[j].nights - 1);
+      s[j].nights -= take; delta -= take;
+      if (!delta) break;
+    }
+  }
+
+  function tripLength(){ return Math.round((parseISO(state.end) - parseISO(state.start)) / DAY); }
+
+  // Tidy a plan from storage or a file: fill gaps, upgrade older formats, reject anything unsafe.
+  function normalise(){
+    const s = state;
+    const okId = v => typeof v === 'string' && /^[a-z0-9]{1,20}$/i.test(v);
+    const legify = (arr, old) => (Array.isArray(arr) ? arr : (old ? [old] : []))
+      .filter(x => x && typeof x === 'object')
+      .map(x => ({id: okId(x.id) ? x.id : uid(), mode: MODES[x.mode] ? x.mode : 'other',
+                  details: String(x.details || ''), cost: Math.max(0, Number(x.cost) || 0)}));
+    if (typeof s.name !== 'string') s.name = 'My holiday';
+    if (!['£','€','$'].includes(s.currency)) s.currency = '£';
+    s.stops = s.stops.filter(x => x && typeof x === 'object').map(x => ({
+      id: okId(x.id) ? x.id : uid(), name: String(x.name || ''),
+      nights: Math.max(1, Math.round(Number(x.nights)) || 1),
+      cost: Math.max(0, Number(x.cost) || 0), notes: String(x.notes || ''),
+      color: /^#[0-9a-f]{6}$/i.test(x.color || '') ? x.color : '',
+      legs: legify(x.legs, x.travel)
+    }));
+    if (!s.stops.length) s.stops = [{id:uid(), name:'', nights:1, cost:0, notes:'', color:'', legs:[]}];
+    s.stops.forEach(x => { if (!x.color) x.color = nextColor(); });
+    s.returnLegs = legify(s.returnLegs, s.returnTravel);
+    delete s.returnTravel;
+    // Older plans had no leave date: derive it, then make sure the stops fill the dates exactly.
+    if (parseISO(s.start) === null) s.start = toISO(todayUTC());
+    if (parseISO(s.end) === null) s.end = toISO(parseISO(s.start) + sumNights()*DAY);
+    if (tripLength() < s.stops.length) s.end = toISO(parseISO(s.start) + s.stops.length*DAY);
+    if (tripLength() !== sumNights()) resizeTotal(tripLength());
+  }
+  normalise();
+
+  const $ = id => document.getElementById(id);
+  const els = {
+    tripName:$('tripName'), startDate:$('startDate'), endDate:$('endDate'), currency:$('currency'),
+    track:$('track'), handles:$('handles'), legmarks:$('legmarks'), axis:$('axis'), stops:$('stops'),
+    sumDates:$('sumDates'), sumCountdown:$('sumCountdown'), sumNights:$('sumNights'), sumDays:$('sumDays'),
+    sumStops:$('sumStops'), sumAvg:$('sumAvg'), sumCost:$('sumCost'), sumPerNight:$('sumPerNight'), toast:$('toast')
+  };
+
+  function startTime(){ return parseISO(state.start) ?? todayUTC(); }
+
+  function derive(){
+    const start = startTime();
+    let cum = 0, cost = 0;
+    const rows = state.stops.map(s => {
+      const arrive = start + cum*DAY;
+      cum += s.nights;
+      const sub = (Number(s.cost)||0) * s.nights;
+      cost += sub;
+      return {stop:s, arrive, depart: start + cum*DAY, before: cum - s.nights, sub};
+    });
+    const legCost = arr => arr.reduce((n, t) => n + (Number(t.cost) || 0), 0);
+    const travel = state.stops.reduce((n, s) => n + legCost(s.legs), 0) + legCost(state.returnLegs);
+    return {start, end: start + cum*DAY, total: cum, stay: cost, travel, cost: cost + travel, rows};
+  }
+
+  function nextColor(){
+    const used = new Set(state.stops.map(s => s.color));
+    return PALETTE.find(c => !used.has(c)) || PALETTE[state.stops.length % PALETTE.length];
+  }
+
+  /* ---------- Header ---------- */
+  function renderHeader(){
+    els.tripName.value = state.name;
+    els.startDate.value = state.start;
+    els.endDate.value = state.end;
+    els.currency.value = state.currency;
+    syncDateLimits();
+  }
+  function syncDateLimits(){
+    const n = state.stops.length;
+    els.endDate.min = toISO(parseISO(state.start) + n*DAY);
+    els.startDate.max = toISO(parseISO(state.end) - n*DAY);
+  }
+
+  /* ---------- Stop cards (structure) ---------- */
+  function renderStops(){
+    const n = state.stops.length;
+    els.stops.innerHTML = state.stops.map((s, i) => {
+      const id = s.id;
+      return legHTML(id, s.legs) + `<li class="stop" data-id="${id}" style="--c:${s.color}">
+        <div class="stop-head">
+          <span class="badge" aria-hidden="true">${i+1}</span>
+          <label class="sr" for="name-${id}">Location ${i+1} name</label>
+          <input class="name" id="name-${id}" data-f="name" value="${esc(s.name)}" placeholder="Where to?" autocomplete="off">
+          <div class="order">
+            <button type="button" class="icon-btn" data-act="up" ${i===0?'disabled':''} aria-label="Move ${esc(s.name)} earlier">↑</button>
+            <button type="button" class="icon-btn" data-act="down" ${i===n-1?'disabled':''} aria-label="Move ${esc(s.name)} later">↓</button>
+            <button type="button" class="icon-btn del" data-act="del" ${n===1?'disabled':''} aria-label="Remove ${esc(s.name)}">✕</button>
+          </div>
+        </div>
+        <p class="dates"><span class="pill" data-o="arrive"></span><span class="arrow" aria-hidden="true">→</span><span class="pill" data-o="depart"></span></p>
+        <div class="nights-row">
+          <label for="range-${id}">Nights here</label>
+          <input type="range" id="range-${id}" data-f="nights" min="1" max="30" step="1">
+          <input type="number" class="nights-num" id="num-${id}" data-f="nights" min="1" max="180" inputmode="numeric" aria-label="Nights in ${esc(s.name)}">
+        </div>
+        <div class="extras">
+          <label class="field" for="cost-${id}">Per night
+            <span class="money"><span class="cur" data-o="cur"></span><input type="number" id="cost-${id}" data-f="cost" min="0" step="1" inputmode="decimal" value="${Number(s.cost)||''}"></span>
+          </label>
+          <div class="subtotal">Subtotal<output data-o="sub"></output></div>
+          <label class="field notes" for="notes-${id}">Notes
+            <input id="notes-${id}" data-f="notes" value="${esc(s.notes||'')}" placeholder="Hotel, bookings, ideas" autocomplete="off">
+          </label>
+        </div>
+      </li>`;
+    }).join('') + legHTML('return', state.returnLegs);
+  }
+
+  // Each gap between stays (plus getting there and getting home) holds any number of travel items.
+  function legHTML(key, items){
+    const rows = items.map(t => {
+      const k = key + '-' + t.id;
+      return `<div class="leg-fields" data-item="${t.id}">
+          <label class="field" for="lmode-${k}">How
+            <select id="lmode-${k}" data-lf="mode">${modeOptions(t.mode)}</select>
+          </label>
+          <label class="field details" for="ldet-${k}">Details
+            <input id="ldet-${k}" data-lf="details" value="${esc(t.details || '')}" placeholder="${esc((MODES[t.mode] || MODES.other).ph)}" autocomplete="off">
+          </label>
+          <label class="field" for="lcost-${k}">Cost
+            <span class="money"><span class="cur" data-o="cur"></span><input type="number" id="lcost-${k}" data-lf="cost" min="0" step="1" inputmode="decimal" value="${Number(t.cost) || ''}"></span>
+          </label>
+          <button type="button" class="icon-btn del" data-act="leg-del" aria-label="Remove ${esc((MODES[t.mode] || MODES.other).label.toLowerCase())}">✕</button>
+        </div>`;
+    }).join('');
+    return `<li class="leg" data-leg="${key}">
+      <span class="leg-line" aria-hidden="true"></span>
+      <div class="leg-body">
+        <div class="leg-title"><b data-o="legroute"></b><span class="mono" data-o="legdate"></span></div>
+        ${rows ? `<div class="leg-items">${rows}</div>` : ''}
+        <button type="button" class="add-leg" data-act="leg-add">${items.length ? '+ Add another travel item' : '+ Add travel'}</button>
+      </div>
+    </li>`;
+  }
+
+  function legsAt(key){
+    if (key === 'return') return state.returnLegs;
+    const s = state.stops.find(x => x.id === key);
+    return s ? s.legs : null;
+  }
+
+  /* ---------- Derived values ---------- */
+  function update(opts){
+    opts = opts || {};
+    const d = derive();
+    const cur = state.currency;
+
+    // Summary
+    els.sumDates.textContent = d.total ? `${fmtDM.format(d.start)} → ${fmtLong.format(d.end)}` : '—';
+    const until = Math.round((d.start - todayUTC())/DAY);
+    const fromEnd = Math.round((d.end - todayUTC())/DAY);
+    els.sumCountdown.textContent = until > 0 ? `Starts in ${plural(until,'day')}` : (fromEnd > 0 ? 'Under way' : 'Finished');
+    els.sumNights.textContent = d.total;
+    els.sumDays.textContent = 'Fixed by your dates';
+    els.sumStops.textContent = state.stops.length;
+    els.sumAvg.textContent = `About ${(d.total/state.stops.length).toFixed(1)} nights each`;
+    els.sumCost.textContent = money(d.cost, cur);
+    els.sumPerNight.textContent = `${money(d.stay, cur)} stays · ${money(d.travel, cur)} travel`;
+
+    // Travel legs: route and travel date
+    const names = state.stops.map(s => s.name || 'Untitled');
+    els.stops.querySelectorAll('.leg').forEach(leg => {
+      const key = leg.dataset.leg;
+      let from, to, when;
+      if (key === 'return'){ from = names[names.length-1]; to = 'Home'; when = d.end; }
+      else {
+        const i = state.stops.findIndex(s => s.id === key);
+        from = i === 0 ? 'Home' : names[i-1]; to = names[i]; when = d.rows[i].arrive;
+      }
+      leg.querySelector('[data-o="legroute"]').textContent = `${from} → ${to}`;
+      leg.querySelector('[data-o="legdate"]').textContent = fmtShort.format(when);
+      leg.querySelectorAll('[data-o="cur"]').forEach(c => { c.textContent = cur; });
+      const add = leg.querySelector('.add-leg'); if (add) add.setAttribute('aria-label', `Add travel from ${from} to ${to}`);
+    });
+
+    // Cards
+    d.rows.forEach((r, i) => {
+      const li = els.stops.querySelector(`[data-id="${r.stop.id}"]`);
+      if (!li) return;
+      const s = r.stop;
+      li.querySelector('[data-o="arrive"]').textContent = fmtShort.format(r.arrive);
+      li.querySelector('[data-o="depart"]').textContent = fmtShort.format(r.depart);
+      li.querySelector('[data-o="sub"]').textContent = money(r.sub, cur);
+      li.querySelector('[data-o="cur"]').textContent = cur;
+      li.querySelector('.badge').textContent = i+1;
+      const range = li.querySelector('input[type=range]');
+      const max = Math.max(1, d.total - (state.stops.length - 1));
+      range.max = max;
+      range.disabled = max === 1;
+      range.value = s.nights;
+      range.style.setProperty('--p', (max > 1 ? (s.nights-1)/(max-1)*100 : 100) + '%');
+      range.setAttribute('aria-valuetext', `${plural(s.nights,'night')}, ${fmtShort.format(r.arrive)} to ${fmtShort.format(r.depart)}`);
+      const num = li.querySelector('.nights-num');
+      num.max = max;
+      num.disabled = max === 1;
+      if (document.activeElement !== num) num.value = s.nights;
+    });
+
+    renderTimeline(d);
+    if (!opts.skipSave) save();
+  }
+
+  /* ---------- Timeline ---------- */
+  let drag = null;
+  let focusHandle = null;
+
+  function renderTimeline(d){
+    const N = d.total;
+    els.track.innerHTML = d.rows.map(r =>
+      `<div class="seg" style="--c:${r.stop.color};flex-grow:${r.stop.nights}" title="${esc(r.stop.name)}: ${plural(r.stop.nights,'night')}">
+        <b>${esc(r.stop.name || 'Untitled')}</b><span>${r.stop.nights}n</span></div>`).join('');
+
+    // Handles
+    let h = '';
+    d.rows.slice(0, -1).forEach((r, i) => {
+      const pos = (r.before + r.stop.nights) / N * 100;
+      const label = `Move between ${r.stop.name || 'Untitled'} and ${d.rows[i+1].stop.name || 'Untitled'}, ${fmtShort.format(r.depart)}. Use arrow keys.`;
+      const dragging = drag && drag.i === i;
+      h += `<button type="button" class="handle${dragging?' dragging':''}" data-i="${i}" style="left:${pos}%" aria-label="${esc(label)}">`
+        + (dragging ? `<span class="drag-tip">${fmtShort.format(r.depart)}</span>` : '')
+        + `</button>`;
+    });
+    els.handles.innerHTML = h;
+
+    // Travel markers above each change-over
+    let lm = '';
+    const mark = (items, pct, cls) => {
+      if (!items.length) return;
+      const labels = items.map(t => (MODES[t.mode] || MODES.other).short);
+      const full = items.map((t, j) => (MODES[t.mode] || MODES.other).label + (t.details ? ': ' + t.details : '')).join('\n');
+      const text = labels.length > 2 ? `${labels[0]} +${labels.length - 1}` : labels.join(' + ');
+      lm += `<span class="legmark ${cls}" style="left:${pct}%" title="${esc(full)}">${esc(text)}</span>`;
+    };
+    d.rows.forEach((r, i) => mark(r.stop.legs, r.before / N * 100, i === 0 ? 'first' : ''));
+    mark(state.returnLegs, 100, 'last');
+    els.legmarks.innerHTML = lm;
+
+    // Axis
+    let a = '';
+    if (N > 0){
+      for (let i = 0; i <= N; i++){
+        const t = d.start + i*DAY;
+        const dt = new Date(t);
+        const wk = dt.getUTCDay() === 1;
+        if (N <= 120 || wk) a += `<span class="tick${wk?' wk':''}" style="left:${i/N*100}%"></span>`;
+        if (i > 0 && i < N && dt.getUTCDate() === 1){
+          a += `<span class="axis-lbl month" style="left:${i/N*100}%">${fmtMonth.format(t)}</span>`;
+        }
+      }
+      a += `<span class="axis-lbl start" style="left:0">${fmtDM.format(d.start)}</span>`;
+      a += `<span class="axis-lbl endl" style="left:100%">${fmtDM.format(d.end)}</span>`;
+      if (!/axis-lbl month/.test(a)) a += `<span class="axis-lbl month" style="left:0">${fmtMonth.format(d.start)}</span>`;
+    }
+    els.axis.innerHTML = a;
+
+    if (focusHandle !== null){
+      const el = els.handles.querySelector(`[data-i="${focusHandle}"]`);
+      if (el) el.focus({preventScroll:true});
+    }
+  }
+
+  function moveBoundary(i, delta, base){
+    const s = state.stops;
+    if (i >= s.length - 1) return;
+    const a0 = base ? base.a0 : s[i].nights;
+    const b0 = base ? base.b0 : s[i+1].nights;
+    const dd = Math.max(1 - a0, Math.min(b0 - 1, delta));
+    s[i].nights = a0 + dd;
+    s[i+1].nights = b0 - dd;
+  }
+
+  els.handles.addEventListener('pointerdown', e => {
+    const hd = e.target.closest('.handle');
+    if (!hd) return;
+    e.preventDefault();
+    const i = +hd.dataset.i;
+    const total = state.stops.reduce((n, s) => n + s.nights, 0);
+    drag = {
+      i, x0: e.clientX,
+      pxPerDay: els.track.clientWidth / total,
+      a0: state.stops[i].nights,
+      b0: state.stops[i+1] ? state.stops[i+1].nights : 0,
+      last: 0
+    };
+    focusHandle = null;
+    update({skipSave:true});
+  });
+  window.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const delta = Math.round((e.clientX - drag.x0) / drag.pxPerDay);
+    if (delta === drag.last) return;
+    drag.last = delta;
+    moveBoundary(drag.i, delta, drag);
+    update({skipSave:true});
+  });
+  const endDrag = () => { if (!drag) return; drag = null; update(); };
+  window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', endDrag);
+
+  els.handles.addEventListener('keydown', e => {
+    const hd = e.target.closest('.handle');
+    if (!hd) return;
+    const step = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    focusHandle = +hd.dataset.i;
+    moveBoundary(focusHandle, step);
+    update();
+  });
+  els.handles.addEventListener('focusout', () => { setTimeout(() => { if (!els.handles.contains(document.activeElement)) focusHandle = null; }, 0); });
+
+  /* ---------- Card events ---------- */
+  els.stops.addEventListener('input', e => {
+    const lf = e.target.dataset.lf;
+    if (lf){
+      const arr = legsAt(e.target.closest('.leg').dataset.leg);
+      const row = e.target.closest('[data-item]');
+      const t = arr && row && arr.find(x => x.id === row.dataset.item);
+      if (!t) return;
+      if (lf === 'cost') t.cost = Math.max(0, parseFloat(e.target.value) || 0);
+      else t[lf] = e.target.value;
+      if (lf === 'mode'){
+        const det = row.querySelector('[data-lf="details"]');
+        det.placeholder = (MODES[t.mode] || MODES.other).ph;
+      }
+      update();
+      return;
+    }
+    const f = e.target.dataset.f;
+    const li = e.target.closest('.stop');
+    if (!f || !li) return;
+    const s = state.stops.find(x => x.id === li.dataset.id);
+    if (!s) return;
+    if (f === 'nights'){
+      const v = parseInt(e.target.value, 10);
+      if (!Number.isFinite(v) || v < 1) return;
+      rebalance(state.stops.indexOf(s), v);
+    } else if (f === 'cost'){
+      s.cost = Math.max(0, parseFloat(e.target.value) || 0);
+    } else {
+      s[f] = e.target.value;
+    }
+    update();
+  });
+  els.stops.addEventListener('change', e => {
+    if (e.target.classList.contains('nights-num')) {
+      const li = e.target.closest('.stop');
+      const s = state.stops.find(x => x.id === li.dataset.id);
+      e.target.value = s.nights;
+    }
+  });
+  els.stops.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    if (b.dataset.act === 'leg-add' || b.dataset.act === 'leg-del'){
+      const key = b.closest('.leg').dataset.leg;
+      const arr = legsAt(key);
+      if (!arr) return;
+      if (b.dataset.act === 'leg-add'){
+        const t = {id:uid(), mode: arr.length ? 'transfer' : 'flight', details:'', cost:0};
+        arr.push(t);
+        renderStops(); update();
+        const sel = document.getElementById('lmode-' + key + '-' + t.id);
+        if (sel) sel.focus();
+      } else {
+        const row = b.closest('[data-item]');
+        const j = arr.findIndex(x => x.id === row.dataset.item);
+        if (j > -1) arr.splice(j, 1);
+        renderStops(); update();
+        const add = els.stops.querySelector(`[data-leg="${key}"] .add-leg`);
+        if (add) add.focus();
+      }
+      return;
+    }
+    const li = b.closest('.stop');
+    const i = state.stops.findIndex(x => x.id === li.dataset.id);
+    const act = b.dataset.act;
+    const s = state.stops;
+    if (act === 'up' && i > 0) [s[i-1], s[i]] = [s[i], s[i-1]];
+    else if (act === 'down' && i < s.length-1) [s[i+1], s[i]] = [s[i], s[i+1]];
+    else if (act === 'del' && s.length > 1){
+      const [gone] = s.splice(i, 1);
+      s[Math.max(0, i - 1)].nights += gone.nights;
+      syncDateLimits();
+    }
+    else return;
+    renderStops(); update();
+    const target = act === 'del' ? null : els.stops.querySelector(`[data-id="${li.dataset.id}"] [data-act="${act}"]`);
+    if (target && !target.disabled) target.focus();
+  });
+
+  $('addStop').addEventListener('click', () => {
+    // The new stop borrows up to 3 nights, one at a time from whichever stop is longest.
+    let got = 0;
+    while (got < 3){
+      const longest = state.stops.reduce((a, b) => b.nights > a.nights ? b : a);
+      if (longest.nights <= 1) break;
+      longest.nights--; got++;
+    }
+    if (!got){ toast('Every stop is down to one night. Move your leave date later to add another location.'); return; }
+    const s = {id:uid(), name:'', nights:got, cost:0, notes:'', color:nextColor(), legs:[]};
+    state.stops.push(s);
+    syncDateLimits();
+    renderStops(); update();
+    const inp = document.getElementById('name-' + s.id);
+    if (inp){ inp.focus(); inp.scrollIntoView({block:'center', behavior:'smooth'}); }
+  });
+
+  els.tripName.addEventListener('input', () => { state.name = els.tripName.value; save(); });
+  function changeDates(which){
+    const inp = which === 'start' ? els.startDate : els.endDate;
+    const t = parseISO(inp.value);
+    if (t === null) return;
+    const start = which === 'start' ? t : parseISO(state.start);
+    const end = which === 'end' ? t : parseISO(state.end);
+    const nights = Math.round((end - start) / DAY);
+    const n = state.stops.length;
+    if (nights < n){
+      toast(`Leave at least ${plural(n,'night')} after arriving, one for each location.`);
+      inp.value = which === 'start' ? state.start : state.end;
+      return;
+    }
+    state[which] = inp.value;
+    resizeTotal(nights, which === 'start');
+    syncDateLimits();
+    update();
+  }
+  els.startDate.addEventListener('change', () => changeDates('start'));
+  els.endDate.addEventListener('change', () => changeDates('end'));
+  els.currency.addEventListener('change', () => { state.currency = els.currency.value; update(); });
+
+  /* ---------- Copy & reset ---------- */
+  function itineraryText(){
+    const d = derive(), cur = state.currency;
+    const lines = [state.name || 'Holiday',
+      `${fmtShort.format(d.start)} – ${fmtShort.format(d.end)} ${new Date(d.end).getUTCFullYear()} · ${plural(d.total,'night')}` + (d.cost ? ` · ${money(d.cost,cur)} total (${money(d.stay,cur)} stays, ${money(d.travel,cur)} travel)` : ''), ''];
+    const legLine = (items, from, to, when) => {
+      if (!items.length) return;
+      lines.push(`   ${fmtShort.format(when)} · ${from} → ${to}`);
+      items.forEach(t => {
+        const m = MODES[t.mode] || MODES.other;
+        lines.push(`     - ${m.label}` + (t.details ? `: ${t.details}` : '') + (Number(t.cost) ? ` · ${money(t.cost,cur)}` : ''));
+      });
+    };
+    d.rows.forEach((r, i) => {
+      const s = r.stop;
+      legLine(s.legs, i === 0 ? 'Home' : (d.rows[i-1].stop.name || 'Untitled'), s.name || 'Untitled', r.arrive);
+      lines.push(`${i+1}. ${s.name || 'Untitled'}: ${fmtShort.format(r.arrive)} → ${fmtShort.format(r.depart)} (${plural(s.nights,'night')})` + (r.sub ? ` · ${money(r.sub,cur)}` : ''));
+      if (s.notes) lines.push(`   ${s.notes}`);
+    });
+    const lastRow = d.rows[d.rows.length-1];
+    legLine(state.returnLegs, lastRow.stop.name || 'Untitled', 'Home', d.end);
+    return lines.join('\n');
+  }
+  let toastTimer;
+  function toast(msg){ els.toast.textContent = msg; clearTimeout(toastTimer); toastTimer = setTimeout(() => els.toast.textContent = '', 3000); }
+
+  $('copyBtn').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(itineraryText()); toast('Itinerary copied. Paste it into a message or note.'); }
+    catch(e){ toast('Copying is blocked here. Open the page in its own tab and try again.'); }
+  });
+
+  const resetBtn = $('resetBtn');
+  let resetArmed = false, resetTimer;
+  resetBtn.addEventListener('click', () => {
+    if (!resetArmed){
+      resetArmed = true; resetBtn.textContent = 'Tap again to clear your plan';
+      resetTimer = setTimeout(() => { resetArmed = false; resetBtn.textContent = 'Reset to example'; }, 3500);
+      return;
+    }
+    clearTimeout(resetTimer); resetArmed = false; resetBtn.textContent = 'Reset to example';
+    state = example(); normalise(); fileHandle = null; fileName = null; renderHeader(); renderStops(); update(); toast('Example trip restored.');
+  });
+
+  /* ---------- Save and open files ---------- */
+  const statusEl = $('fileStatus');
+  const saveAsBtn = $('saveAsBtn');
+  const canPick = typeof window.showSaveFilePicker === 'function';
+  // On iPhone and iPad, saving goes through the share sheet, where "Save to Files" reaches iCloud Drive.
+  const useShare = !canPick && navigator.maxTouchPoints > 1 && (() => {
+    try { return !!(navigator.canShare && navigator.canShare({files:[new File(['{}'], 'test.json', {type:'application/json'})]})); }
+    catch(e){ return false; }
+  })();
+  if (useShare){
+    $('saveBtn').textContent = 'Save to Files';
+    $('saveHint').textContent = 'Your plan also autosaves on this device. To keep it in iCloud Drive, tap Save to Files, choose Save to Files, then pick a folder in iCloud Drive. To load it again, tap Open plan and choose the file. Saving with the same name asks whether to replace the old copy.';
+  }
+  const fmtTime = new Intl.DateTimeFormat('en-GB', {hour:'2-digit', minute:'2-digit'});
+
+  function showStatus(){
+    let text, cls = '';
+    if (!fileName) { text = 'Not saved to a file yet'; cls = dirty ? 'dirty' : ''; }
+    else if (dirty) { text = `Unsaved changes since ${fileName}`; cls = 'dirty'; }
+    else if (savedHow === 'opened') { text = `Opened ${fileName}`; cls = 'saved'; }
+    else if (savedHow === 'downloaded') { text = `Downloaded ${fileName} at ${fmtTime.format(savedAt)}`; cls = 'saved'; }
+    else if (savedHow === 'last') { text = `Last saved as ${fileName}`; cls = 'saved'; }
+    else { text = `Saved to ${fileName} at ${fmtTime.format(savedAt)}`; cls = 'saved'; }
+    statusEl.textContent = text;
+    statusEl.className = 'file-status ' + cls;
+    saveAsBtn.hidden = !(canPick && fileHandle);
+  }
+
+  function fileData(){
+    return JSON.stringify({app:'holiday-planner', version:2, savedAt:new Date().toISOString(), plan:state}, null, 2);
+  }
+  function suggestedName(){
+    const slug = (state.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+    return (slug || 'holiday-plan') + '.json';
+  }
+  function markSaved(name, how){
+    fileName = name; dirty = false; savedAt = new Date(); savedHow = how;
+    persistLocal(); showStatus();
+  }
+
+  function download(){
+    const name = fileName || suggestedName();
+    const url = URL.createObjectURL(new Blob([fileData()], {type:'application/json'}));
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    markSaved(name, 'downloaded');
+    toast(`Saved ${name} to your Downloads folder.`);
+  }
+
+  async function shareFile(){
+    const name = fileName || suggestedName();
+    const file = new File([fileData()], name, {type:'application/json'});
+    try {
+      await navigator.share({files:[file]});
+      markSaved(name, 'saved');
+      toast('Saved. Use Open plan to load it again.');
+    } catch(e){
+      if (e && e.name === 'AbortError') return;
+      download();
+    }
+  }
+
+  async function saveFile(asNew){
+    if (useShare) return shareFile();
+    if (!canPick) return download();
+    try {
+      if (!fileHandle || asNew){
+        fileHandle = await window.showSaveFilePicker({
+          suggestedName: fileName || suggestedName(),
+          types: [{description:'Holiday plan', accept:{'application/json':['.json']}}]
+        });
+      }
+      const w = await fileHandle.createWritable();
+      await w.write(fileData());
+      await w.close();
+      markSaved(fileHandle.name, 'saved');
+      toast('Plan saved.');
+    } catch(e){
+      if (e && e.name === 'AbortError') return;
+      fileHandle = null;
+      download();
+    }
+  }
+
+  async function loadFromFile(file){
+    let data;
+    try { data = JSON.parse(await file.text()); }
+    catch(e){ toast(`${file.name} isn't a holiday plan. Choose a .json file saved from this planner.`); return false; }
+    const plan = data && typeof data === 'object' && data.plan ? data.plan : data;
+    if (!plan || typeof plan !== 'object' || !Array.isArray(plan.stops) || !plan.stops.length){
+      toast(`${file.name} doesn't contain a holiday plan.`);
+      return false;
+    }
+    state = plan;
+    normalise();
+    fileHandle = null;
+    renderHeader(); renderStops(); update({skipSave:true});
+    fileName = file.name; dirty = false; savedHow = 'opened';
+    persistLocal(); showStatus();
+    toast(`Opened ${file.name}.`);
+    return true;
+  }
+
+  const fileInput = $('fileInput');
+  $('openBtn').addEventListener('click', async () => {
+    if (dirty && fileName && !confirmOpen()) return;
+    if (typeof window.showOpenFilePicker === 'function'){
+      try {
+        const [h] = await window.showOpenFilePicker({types:[{description:'Holiday plan', accept:{'application/json':['.json']}}]});
+        if (await loadFromFile(await h.getFile())) { fileHandle = h; showStatus(); }
+      } catch(e){ if (!e || e.name !== 'AbortError') fileInput.click(); }
+    } else fileInput.click();
+  });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFromFile(fileInput.files[0]); fileInput.value = ''; });
+  $('saveBtn').addEventListener('click', () => saveFile(false));
+  saveAsBtn.addEventListener('click', () => saveFile(true));
+
+  // Opening another plan replaces this one; ask once with a two-tap confirm on the Open button.
+  let openArmed = false, openTimer;
+  function confirmOpen(){
+    const b = $('openBtn');
+    if (openArmed){ clearTimeout(openTimer); openArmed = false; b.textContent = 'Open plan…'; return true; }
+    openArmed = true; b.textContent = 'Unsaved changes. Tap again to open anyway';
+    openTimer = setTimeout(() => { openArmed = false; b.textContent = 'Open plan…'; }, 4000);
+    return false;
+  }
+
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's'){ e.preventDefault(); saveFile(e.shiftKey); }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o'){ e.preventDefault(); $('openBtn').click(); }
+  });
+
+  // Drop a saved plan anywhere on the page to open it.
+  let dragDepth = 0;
+  const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  window.addEventListener('dragenter', e => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; document.body.classList.add('dropping'); });
+  window.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+  window.addEventListener('dragleave', () => { if (--dragDepth <= 0){ dragDepth = 0; document.body.classList.remove('dropping'); } });
+  window.addEventListener('drop', e => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); dragDepth = 0; document.body.classList.remove('dropping');
+    const f = e.dataTransfer.files[0];
+    if (f) loadFromFile(f);
+  });
+
+  window.addEventListener('beforeunload', e => { if (dirty && fileName){ e.preventDefault(); e.returnValue = ''; } });
+
+  window.addEventListener('resize', () => update({skipSave:true}));
+
+  renderHeader(); renderStops(); update({skipSave:true}); showStatus();
+
+  if ('serviceWorker' in navigator && location.protocol === 'https:'){
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
+})();
+</script>
+</body>
+</html>
