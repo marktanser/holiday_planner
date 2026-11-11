@@ -109,6 +109,8 @@ button{-webkit-tap-highlight-color:transparent}
 .leg-title b{color:var(--ink);font-weight:600}
 .leg-fields{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:end;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .leg-fields .field select,.leg-fields .field input{min-height:38px;background:var(--field)}
+.check{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 6px;font-size:14px;font-weight:500;cursor:pointer}
+.check input{width:18px;height:18px;accent-color:var(--accent);margin:0}
 .leg-items{display:flex;flex-direction:column;gap:8px}
 .filebar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px}
 .file-status{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
@@ -260,6 +262,8 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
   <div class="foot">
     <div class="btn-row">
       <button class="btn" id="copyBtn" type="button">Copy itinerary</button>
+      <button class="btn" id="excelBtn" type="button">Export to Excel</button>
+      <label class="check" for="excelCosts"><input type="checkbox" id="excelCosts" checked> Include costs</label>
       <button class="btn quiet" id="resetBtn" type="button">Reset to example</button>
     </div>
     <span class="toast" id="toast" role="status"></span>
@@ -894,13 +898,16 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
     persistLocal(); showStatus();
   }
 
-  function download(){
-    const name = fileName || suggestedName();
-    const url = URL.createObjectURL(new Blob([fileData()], {type:'application/json'}));
+  function downloadBlob(blob, name){
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+  function download(){
+    const name = fileName || suggestedName();
+    downloadBlob(new Blob([fileData()], {type:'application/json'}), name);
     markSaved(name, 'downloaded');
     toast(`Saved ${name} to your Downloads folder.`);
   }
@@ -999,6 +1006,188 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
     e.preventDefault(); dragDepth = 0; document.body.classList.remove('dropping');
     const f = e.dataTransfer.files[0];
     if (f) loadFromFile(f);
+  });
+
+  /* ---------- Excel export ---------- */
+  const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  const excelBtn = $('excelBtn'), excelCosts = $('excelCosts');
+  try { if (localStorage.getItem(KEY + '-xlcosts') === '0') excelCosts.checked = false; } catch(e){}
+  excelCosts.addEventListener('change', () => { try { localStorage.setItem(KEY + '-xlcosts', excelCosts.checked ? '1' : '0'); } catch(e){} });
+
+  // The spreadsheet library is stored with the app, so it works offline. Load it once the page is idle.
+  let excelLib = null;
+  function loadExcel(){
+    if (!excelLib) excelLib = new Promise((resolve, reject) => {
+      if (window.ExcelJS) return resolve(window.ExcelJS);
+      const sc = document.createElement('script');
+      sc.src = 'exceljs.min.js';
+      sc.onload = () => window.ExcelJS ? resolve(window.ExcelJS) : reject(new Error('missing'));
+      sc.onerror = () => { excelLib = null; reject(new Error('load')); };
+      document.head.appendChild(sc);
+    });
+    return excelLib;
+  }
+  setTimeout(() => { loadExcel().catch(() => {}); }, 1500);
+
+  async function buildWorkbook(withCosts){
+    const ExcelJS = await loadExcel();
+    const d = derive(), cur = state.currency;
+    const name = i => state.stops[i].name || 'Untitled';
+    const moneyFmt = `"${cur}"#,##0.00`;
+    const dateFmt = 'ddd d mmm yyyy';
+    const ACCENT = 'FF2445C4', LINE = 'FFD9DEE7', MUTED = 'FF5A6575';
+    const argb = hex => 'FF' + hex.replace('#', '').toUpperCase();
+    const font = (o = {}) => Object.assign({name: 'Calibri', size: 11}, o);
+    const ALIGN = {start: 'left', end: 'left', type: 'left', where: 'left', nights: 'center', details: 'left', rate: 'right', cost: 'right'};
+    // Plan dates are UTC midnights, which is what the spreadsheet library expects for a plain date.
+    const xlDate = t => new Date(t);
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Holiday Planner';
+    wb.created = new Date();
+    const ws = wb.addWorksheet('Itinerary', {
+      views: [{state: 'frozen', ySplit: 4}],
+      pageSetup: {orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9}
+    });
+    const cols = [
+      {key: 'start', header: 'Date', width: 17},
+      {key: 'end', header: 'Until', width: 17},
+      {key: 'type', header: 'Type', width: 16},
+      {key: 'where', header: 'Where', width: 30},
+      {key: 'nights', header: 'Nights', width: 8},
+      {key: 'details', header: 'Details and notes', width: 52}
+    ];
+    if (withCosts) cols.push({key: 'rate', header: 'Per night', width: 13}, {key: 'cost', header: 'Cost', width: 13});
+    ws.columns = cols.map(c => ({key: c.key, width: c.width}));
+    const lastCol = String.fromCharCode(64 + cols.length);
+
+    ws.mergeCells(`A1:${lastCol}1`);
+    ws.getCell('A1').value = state.name || 'Holiday';
+    ws.getCell('A1').font = font({size: 16, bold: true});
+    ws.mergeCells(`A2:${lastCol}2`);
+    ws.getCell('A2').value = `${fmtLong.format(d.start)} to ${fmtLong.format(d.end)} · ${plural(d.total, 'night')} · ${plural(state.stops.length, 'location')}`;
+    ws.getCell('A2').font = font({color: {argb: MUTED}});
+    ws.getRow(1).height = 24;
+
+    const head = ws.getRow(4);
+    cols.forEach((c, i) => {
+      const cell = head.getCell(i + 1);
+      cell.value = c.header;
+      cell.font = font({bold: true, color: {argb: 'FFFFFFFF'}});
+      cell.fill = {type: 'pattern', pattern: 'solid', fgColor: {argb: ACCENT}};
+      cell.alignment = {vertical: 'middle', horizontal: ALIGN[c.key]};
+    });
+    head.height = 20;
+
+    const items = [];
+    const addLegs = (legs, from, to, when) => legs.forEach(t => items.push({
+      kind: 'travel', start: when, type: (MODES[t.mode] || MODES.other).label,
+      where: `${from} → ${to}`, details: t.details || '', cost: Number(t.cost) || 0
+    }));
+    d.rows.forEach((r, i) => {
+      addLegs(r.stop.legs, i === 0 ? 'Home' : name(i - 1), name(i), r.arrive);
+      items.push({kind: 'stay', start: r.arrive, end: r.depart, type: 'Stay', where: name(i),
+        nights: r.stop.nights, details: r.stop.notes || '', rate: Number(r.stop.cost) || 0, color: r.stop.color});
+    });
+    addLegs(state.returnLegs, name(state.stops.length - 1), 'Home', d.end);
+
+    const first = 5;
+    items.forEach((it, j) => {
+      const n = first + j;
+      const row = ws.getRow(n);
+      row.getCell('start').value = xlDate(it.start);
+      row.getCell('start').numFmt = dateFmt;
+      if (it.end){ row.getCell('end').value = xlDate(it.end); row.getCell('end').numFmt = dateFmt; }
+      row.getCell('type').value = it.type;
+      row.getCell('where').value = it.where;
+      if (it.nights) row.getCell('nights').value = it.nights;
+      row.getCell('details').value = it.details;
+      if (withCosts){
+        if (it.kind === 'stay'){
+          row.getCell('rate').value = it.rate;
+          row.getCell('cost').value = {formula: `E${n}*G${n}`, result: it.rate * it.nights};
+        } else {
+          row.getCell('cost').value = it.cost;
+        }
+        row.getCell('rate').numFmt = moneyFmt;
+        row.getCell('cost').numFmt = moneyFmt;
+      }
+      cols.forEach(c => {
+        const cell = row.getCell(c.key);
+        cell.alignment = {vertical: 'top', horizontal: ALIGN[c.key], wrapText: c.key === 'details' || c.key === 'where'};
+        cell.border = {bottom: {style: 'thin', color: {argb: LINE}}};
+        cell.font = it.kind === 'stay' ? font({bold: c.key === 'type'}) : font({color: {argb: MUTED}});
+      });
+      if (it.kind === 'stay'){
+        const w = row.getCell('where');
+        w.fill = {type: 'pattern', pattern: 'solid', fgColor: {argb: argb(it.color)}};
+        w.font = font({bold: true, color: {argb: 'FFFFFFFF'}});
+      }
+    });
+    const last = first + items.length - 1;
+    ws.autoFilter = `A4:${lastCol}${last}`;
+
+    if (withCosts){
+      const t = last + 2;
+      const lines = [
+        ['Stays', {formula: `SUMIF(C${first}:C${last},"Stay",H${first}:H${last})`, result: d.stay}],
+        ['Travel', {formula: `SUM(H${first}:H${last})-H${t}`, result: d.travel}],
+        ['Total', {formula: `SUM(H${first}:H${last})`, result: d.cost}]
+      ];
+      lines.forEach(([label, value], k) => {
+        const row = ws.getRow(t + k);
+        const l = row.getCell('rate'), v = row.getCell('cost');
+        l.value = label; l.alignment = {horizontal: 'right'};
+        v.value = value; v.numFmt = moneyFmt;
+        l.font = v.font = font({bold: label === 'Total'});
+        if (label === 'Total'){
+          v.border = {top: {style: 'thin'}, bottom: {style: 'double'}};
+        }
+      });
+    }
+
+    const buf = await wb.xlsx.writeBuffer();
+    return new Blob([buf], {type: XLSX_MIME});
+  }
+
+  // iPhone and iPad only let a tap open the share sheet straight away. If building the file took
+  // too long, the button changes to "Tap to save" and the next tap shares the finished file.
+  let pendingShare = null;
+  function resetExcelBtn(){ pendingShare = null; excelBtn.textContent = 'Export to Excel'; excelBtn.classList.remove('primary'); }
+  async function shareOrDownload(file){
+    if (useShare && navigator.canShare && navigator.canShare({files: [file]})){
+      try { await navigator.share({files: [file]}); toast('Spreadsheet ready.'); return; }
+      catch(e){
+        if (e && e.name === 'AbortError') return;
+        if (e && e.name === 'NotAllowedError'){
+          pendingShare = file;
+          excelBtn.textContent = 'Spreadsheet ready. Tap to save';
+          excelBtn.classList.add('primary');
+          return;
+        }
+      }
+    }
+    downloadBlob(file, file.name);
+    toast(`Saved ${file.name} to your Downloads folder.`);
+  }
+
+  excelBtn.addEventListener('click', async () => {
+    if (pendingShare){
+      const f = pendingShare; resetExcelBtn();
+      navigator.share({files: [f]}).then(() => toast('Spreadsheet ready.')).catch(() => {});
+      return;
+    }
+    const withCosts = excelCosts.checked;
+    const slug = suggestedName().replace(/\.json$/, '');
+    excelBtn.disabled = true; excelBtn.textContent = 'Building spreadsheet…';
+    try {
+      const blob = await buildWorkbook(withCosts);
+      excelBtn.disabled = false; excelBtn.textContent = 'Export to Excel';
+      await shareOrDownload(new File([blob], `${slug}${withCosts ? '' : '-no-costs'}.xlsx`, {type: XLSX_MIME}));
+    } catch(e){
+      excelBtn.disabled = false; resetExcelBtn();
+      toast('The spreadsheet could not be made. Check you are online the first time you export, then try again.');
+    }
   });
 
   window.addEventListener('beforeunload', e => { if (dirty && fileName){ e.preventDefault(); e.returnValue = ''; } });

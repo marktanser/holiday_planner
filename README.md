@@ -25,6 +25,10 @@ Plan stays between fixed holiday dates, with travel between each stop. It runs i
 
 The app also keeps your latest plan on each device by itself. The iCloud file is your backup and the way to move a plan between devices.
 
+## Exporting to Excel
+
+Tap **Export to Excel** to make a spreadsheet of the whole trip: each stay and travel item in date order. Untick **Include costs** first for a version without prices or totals, for example to share with people you're travelling with. On iPhone and iPad the file opens in the share sheet, so you can save it to Files or send it on.
+
 ## Updating the app
 
 Upload a new `index.html` over the old one. Devices pick it up the next time they open the app online. If you change the icons, also change `CACHE` at the top of `sw.js` (for example to `holiday-planner-v2`).
