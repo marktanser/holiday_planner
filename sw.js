@@ -1,8 +1,8 @@
 // Offline support for the Holiday Planner.
 // The page itself is fetched fresh when online (so updates appear) and served from the cache when offline.
 // Change CACHE when you replace the icons or manifest so phones pick up the new copies.
-const CACHE = 'holiday-planner-v2';
-const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png', './exceljs.min.js'];
+const CACHE = 'holiday-planner-v3';
+const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png', './exceljs.min.js', './jspdf.umd.min.js', './jspdf.plugin.autotable.min.js'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));

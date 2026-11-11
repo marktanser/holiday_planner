@@ -25,9 +25,14 @@ Plan stays between fixed holiday dates, with travel between each stop. It runs i
 
 The app also keeps your latest plan on each device by itself. The iCloud file is your backup and the way to move a plan between devices.
 
-## Exporting to Excel
+## Exporting
 
-Tap **Export to Excel** to make a spreadsheet of the whole trip: each stay and travel item in date order. Untick **Include costs** first for a version without prices or totals, for example to share with people you're travelling with. On iPhone and iPad the file opens in the share sheet, so you can save it to Files or send it on.
+Tap **Export** and choose:
+
+- **PDF document**: a formatted itinerary with a timeline bar, every stay and travel item in date order, and totals. Good for printing or sending.
+- **Excel spreadsheet**: the same rows in a spreadsheet you can edit, with cost formulas.
+
+Untick **Include costs** first for versions without prices or totals, for example to share with people you're travelling with. On iPhone and iPad the file opens in the share sheet, so you can save it to Files, print it or send it on.
 
 ## Updating the app
 

@@ -109,6 +109,12 @@ button{-webkit-tap-highlight-color:transparent}
 .leg-title b{color:var(--ink);font-weight:600}
 .leg-fields{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:end;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .leg-fields .field select,.leg-fields .field input{min-height:38px;background:var(--field)}
+.menu-wrap{position:relative}
+.menu{position:absolute;bottom:calc(100% + 6px);left:0;z-index:5;min-width:260px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:6px;display:flex;flex-direction:column;gap:2px}
+.menu[hidden]{display:none}
+.menu button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;border:0;background:transparent;border-radius:7px;padding:10px 12px;min-height:44px;cursor:pointer;font-weight:600;color:var(--ink)}
+.menu button small{font-weight:400;font-size:12.5px;color:var(--muted)}
+.menu button:hover,.menu button:focus-visible{background:var(--field);outline:none}
 .check{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 6px;font-size:14px;font-weight:500;cursor:pointer}
 .check input{width:18px;height:18px;accent-color:var(--accent);margin:0}
 .leg-items{display:flex;flex-direction:column;gap:8px}
@@ -262,8 +268,14 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
   <div class="foot">
     <div class="btn-row">
       <button class="btn" id="copyBtn" type="button">Copy itinerary</button>
-      <button class="btn" id="excelBtn" type="button">Export to Excel</button>
-      <label class="check" for="excelCosts"><input type="checkbox" id="excelCosts" checked> Include costs</label>
+      <div class="menu-wrap">
+        <button class="btn" id="exportBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="exportMenu">Export <span aria-hidden="true">▾</span></button>
+        <div class="menu" id="exportMenu" role="menu" aria-label="Export as" hidden>
+          <button type="button" role="menuitem" data-export="pdf">PDF document<small>Formatted itinerary to print or share</small></button>
+          <button type="button" role="menuitem" data-export="xlsx">Excel spreadsheet<small>Rows and totals you can edit</small></button>
+        </div>
+      </div>
+      <label class="check" for="exportCosts"><input type="checkbox" id="exportCosts" checked> Include costs</label>
       <button class="btn quiet" id="resetBtn" type="button">Reset to example</button>
     </div>
     <span class="toast" id="toast" role="status"></span>
@@ -1008,26 +1020,30 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
     if (f) loadFromFile(f);
   });
 
-  /* ---------- Excel export ---------- */
+  /* ---------- Export: PDF and Excel ---------- */
   const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-  const excelBtn = $('excelBtn'), excelCosts = $('excelCosts');
-  try { if (localStorage.getItem(KEY + '-xlcosts') === '0') excelCosts.checked = false; } catch(e){}
-  excelCosts.addEventListener('change', () => { try { localStorage.setItem(KEY + '-xlcosts', excelCosts.checked ? '1' : '0'); } catch(e){} });
+  const exportBtn = $('exportBtn'), exportMenu = $('exportMenu'), exportCosts = $('exportCosts');
+  try { if (localStorage.getItem(KEY + '-xlcosts') === '0') exportCosts.checked = false; } catch(e){}
+  exportCosts.addEventListener('change', () => { try { localStorage.setItem(KEY + '-xlcosts', exportCosts.checked ? '1' : '0'); } catch(e){} });
 
-  // The spreadsheet library is stored with the app, so it works offline. Load it once the page is idle.
-  let excelLib = null;
-  function loadExcel(){
-    if (!excelLib) excelLib = new Promise((resolve, reject) => {
-      if (window.ExcelJS) return resolve(window.ExcelJS);
+  // The export libraries are stored with the app, so exporting works offline. They load once the page is idle.
+  const libs = {};
+  function loadScript(src, ready){
+    if (!libs[src]) libs[src] = new Promise((resolve, reject) => {
+      if (ready()) return resolve(ready());
       const sc = document.createElement('script');
-      sc.src = 'exceljs.min.js';
-      sc.onload = () => window.ExcelJS ? resolve(window.ExcelJS) : reject(new Error('missing'));
-      sc.onerror = () => { excelLib = null; reject(new Error('load')); };
+      sc.src = src;
+      sc.onload = () => ready() ? resolve(ready()) : reject(new Error('missing ' + src));
+      sc.onerror = () => { delete libs[src]; reject(new Error('load ' + src)); };
       document.head.appendChild(sc);
     });
-    return excelLib;
+    return libs[src];
   }
-  setTimeout(() => { loadExcel().catch(() => {}); }, 1500);
+  const loadExcel = () => loadScript('exceljs.min.js', () => window.ExcelJS);
+  const loadPdf = () => loadScript('jspdf.umd.min.js', () => window.jspdf)
+    .then(() => loadScript('jspdf.plugin.autotable.min.js',
+      () => window.jspdf && window.jspdf.jsPDF.API.autoTable ? window.jspdf : null));
+  setTimeout(() => { loadPdf().catch(() => {}); loadExcel().catch(() => {}); }, 1500);
 
   async function buildWorkbook(withCosts){
     const ExcelJS = await loadExcel();
@@ -1150,19 +1166,162 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
     return new Blob([buf], {type: XLSX_MIME});
   }
 
-  // iPhone and iPad only let a tap open the share sheet straight away. If building the file took
-  // too long, the button changes to "Tap to save" and the next tap shares the finished file.
+  async function buildPdf(withCosts){
+    const {jsPDF} = await loadPdf();
+    const d = derive(), cur = state.currency;
+    const doc = new jsPDF({unit: 'mm', format: 'a4', compress: true});
+    const W = 210, H = 297, M = 14;
+    const INK = [23, 32, 44], MUT = [90, 101, 117], LINE = [217, 222, 231], ACC = [36, 69, 196], FIELD = [245, 247, 250];
+    const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+    // The PDF's built-in fonts cover Western European text, so arrows become "to" and other symbols are replaced.
+    const pdfText = v => String(v || '').replace(/\s*→\s*/g, ' to ')
+      .replace(/[^\x20-\x7E\xA0-\xFF€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ\n]/g, '?');
+    const name = i => pdfText(state.stops[i].name || 'Untitled');
+    const m = n => pdfText(money(n, cur));
+    const fit = (t, maxW) => {
+      if (maxW < 4) return '';
+      if (doc.getTextWidth(t) <= maxW) return t;
+      while (t.length > 1 && doc.getTextWidth(t + '…') > maxW) t = t.slice(0, -1);
+      return t.length > 1 ? t + '…' : '';
+    };
+    doc.setProperties({title: pdfText(state.name || 'Holiday'), creator: 'Holiday Planner'});
+
+    // Header band
+    doc.setFillColor(...ACC); doc.rect(0, 0, W, 34, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(20);
+    doc.text(fit(pdfText(state.name || 'Holiday'), W - 2 * M), M, 16);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5);
+    doc.text(`${fmtShort.format(d.start)} ${new Date(d.start).getUTCFullYear()} to ${fmtShort.format(d.end)} ${new Date(d.end).getUTCFullYear()}`, M, 25);
+
+    // Summary boxes
+    const stats = [['Nights', String(d.total)], ['Locations', String(state.stops.length)]];
+    if (withCosts) stats.push(['Stays', m(d.stay)], ['Travel', m(d.travel)], ['Total', m(d.cost)]);
+    const gap = 4, boxW = (W - 2 * M - gap * (stats.length - 1)) / stats.length;
+    stats.forEach(([label, val], i) => {
+      const x = M + i * (boxW + gap);
+      doc.setFillColor(...FIELD); doc.setDrawColor(...LINE); doc.setLineWidth(0.3);
+      doc.roundedRect(x, 42, boxW, 17, 2, 2, 'FD');
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...MUT);
+      doc.text(label.toUpperCase(), x + 4, 48);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(...INK);
+      doc.text(fit(val, boxW - 6), x + 4, 55.5);
+    });
+
+    // Timeline bar, one segment per stay, sized by nights
+    const barY = 67, barH = 11, barW = W - 2 * M;
+    let x = M;
+    d.rows.forEach((r, i) => {
+      const w = r.stop.nights / d.total * barW;
+      doc.setFillColor(...rgb(r.stop.color)); doc.rect(x, barY, w, barH, 'F');
+      doc.setTextColor(255, 255, 255); doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      const nm = fit(name(i), w - 3); if (nm) doc.text(nm, x + 1.5, barY + 4.6);
+      doc.setFont('helvetica', 'normal');
+      const nn = plural(r.stop.nights, 'night'); if (doc.getTextWidth(nn) <= w - 3) doc.text(nn, x + 1.5, barY + 8.8);
+      if (i > 0){ doc.setDrawColor(255, 255, 255); doc.setLineWidth(0.6); doc.line(x, barY, x, barY + barH); }
+      x += w;
+    });
+    doc.setFontSize(7.5); doc.setTextColor(...MUT); doc.setFont('helvetica', 'normal');
+    doc.text(fmtShort.format(d.start), M, barY + barH + 4.5);
+    doc.text(fmtShort.format(d.end), W - M, barY + barH + 4.5, {align: 'right'});
+
+    // Itinerary table in date order
+    const rows = [];
+    const addLegs = (legs, from, to, when) => legs.forEach(t => rows.push({kind: 'travel', cells: [
+      fmtShort.format(when), (MODES[t.mode] || MODES.other).label, `${from} to ${to}`, pdfText(t.details),
+      '', ...(withCosts ? [Number(t.cost) ? m(t.cost) : ''] : [])
+    ]}));
+    d.rows.forEach((r, i) => {
+      addLegs(r.stop.legs, i === 0 ? 'Home' : name(i - 1), name(i), r.arrive);
+      const rate = Number(r.stop.cost) || 0;
+      rows.push({kind: 'stay', color: r.stop.color, cells: [
+        `${fmtShort.format(r.arrive)}\nto ${fmtShort.format(r.depart)}`, 'Stay', name(i), pdfText(r.stop.notes),
+        String(r.stop.nights), ...(withCosts ? [rate ? `${m(r.sub)}\n${m(rate)} a night` : ''] : [])
+      ]});
+    });
+    addLegs(state.returnLegs, name(state.stops.length - 1), 'Home', d.end);
+
+    const head = ['Date', 'Type', 'Where', 'Details and notes', 'Nights', ...(withCosts ? ['Cost'] : [])];
+    const pad = {top: 2.4, bottom: 2.4, left: 2, right: 2};
+    doc.autoTable({
+      startY: 88,
+      margin: {left: M, right: M, top: 16, bottom: 18},
+      head: [head],
+      body: rows.map(r => r.cells),
+      theme: 'plain',
+      styles: {font: 'helvetica', fontSize: 9, textColor: INK, cellPadding: pad, lineColor: LINE, lineWidth: {bottom: 0.2}, valign: 'top', overflow: 'linebreak'},
+      headStyles: {fillColor: ACC, textColor: [255, 255, 255], fontStyle: 'bold', lineWidth: 0},
+      columnStyles: {
+        0: {cellWidth: 30, cellPadding: {top: 2.4, bottom: 2.4, left: 4, right: 2}},
+        1: {cellWidth: 24},
+        2: {cellWidth: 38},
+        4: {cellWidth: 14, halign: 'center'},
+        5: {cellWidth: 26, halign: 'right'}
+      },
+      didParseCell: data => {
+        if (data.section === 'head'){
+          if (data.column.index === 0) data.cell.styles.cellPadding = {top: 2.4, bottom: 2.4, left: 4, right: 2};
+          if (data.column.index === 4) data.cell.styles.halign = 'center';
+          if (data.column.index === 5) data.cell.styles.halign = 'right';
+          return;
+        }
+        const r = rows[data.row.index];
+        if (r.kind === 'travel'){ data.cell.styles.textColor = MUT; data.cell.styles.fontSize = 8.5; }
+        else if (data.column.index === 1 || data.column.index === 2) data.cell.styles.fontStyle = 'bold';
+      },
+      didDrawCell: data => {
+        if (data.section !== 'body' || data.column.index !== 0) return;
+        const r = rows[data.row.index];
+        if (r.kind !== 'stay') return;
+        doc.setFillColor(...rgb(r.color));
+        doc.rect(data.cell.x, data.cell.y + 0.8, 1.4, data.cell.height - 1.6, 'F');
+      }
+    });
+
+    // Totals
+    if (withCosts){
+      let y = doc.lastAutoTable.finalY + 8;
+      if (y > H - 40){ doc.addPage(); y = 24; }
+      const lx = W - M - 46;
+      [['Stays', d.stay], ['Travel', d.travel], ['Total', d.cost]].forEach(([label, val], k) => {
+        const total = label === 'Total';
+        if (total){ doc.setDrawColor(...INK); doc.setLineWidth(0.3); doc.line(lx, y - 4.2, W - M, y - 4.2); }
+        doc.setFont('helvetica', total ? 'bold' : 'normal'); doc.setFontSize(total ? 11 : 9.5);
+        doc.setTextColor(...(total ? INK : MUT));
+        doc.text(label, lx, y);
+        doc.setTextColor(...INK);
+        doc.text(m(val), W - M, y, {align: 'right'});
+        y += total ? 7 : 6;
+      });
+    }
+
+    // Footer on every page
+    const pages = doc.getNumberOfPages();
+    for (let i = 1; i <= pages; i++){
+      doc.setPage(i);
+      doc.setDrawColor(...LINE); doc.setLineWidth(0.2); doc.line(M, H - 12, W - M, H - 12);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...MUT);
+      doc.text(fit(pdfText(state.name || 'Holiday'), 120), M, H - 7);
+      doc.text(`Page ${i} of ${pages}`, W - M, H - 7, {align: 'right'});
+    }
+    return doc.output('blob');
+  }
+
+  // iPhone and iPad only let a tap open the share sheet straight away. If making the file took
+  // too long, the Export button changes to "Tap to save" and the next tap shares the finished file.
   let pendingShare = null;
-  function resetExcelBtn(){ pendingShare = null; excelBtn.textContent = 'Export to Excel'; excelBtn.classList.remove('primary'); }
+  const EXPORT_LABEL = exportBtn.innerHTML;
+  function resetExportBtn(){ pendingShare = null; exportBtn.innerHTML = EXPORT_LABEL; exportBtn.classList.remove('primary'); }
   async function shareOrDownload(file){
     if (useShare && navigator.canShare && navigator.canShare({files: [file]})){
-      try { await navigator.share({files: [file]}); toast('Spreadsheet ready.'); return; }
+      try { await navigator.share({files: [file]}); toast('Export ready.'); return; }
       catch(e){
         if (e && e.name === 'AbortError') return;
         if (e && e.name === 'NotAllowedError'){
           pendingShare = file;
-          excelBtn.textContent = 'Spreadsheet ready. Tap to save';
-          excelBtn.classList.add('primary');
+          exportBtn.textContent = 'File ready. Tap to save';
+          exportBtn.classList.add('primary');
           return;
         }
       }
@@ -1171,22 +1330,52 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
     toast(`Saved ${file.name} to your Downloads folder.`);
   }
 
-  excelBtn.addEventListener('click', async () => {
+  function openMenu(){
+    exportMenu.hidden = false;
+    exportBtn.setAttribute('aria-expanded', 'true');
+    exportMenu.querySelector('[role="menuitem"]').focus();
+  }
+  function closeMenu(focusBtn){
+    if (exportMenu.hidden) return;
+    exportMenu.hidden = true;
+    exportBtn.setAttribute('aria-expanded', 'false');
+    if (focusBtn) exportBtn.focus();
+  }
+  exportBtn.addEventListener('click', () => {
     if (pendingShare){
-      const f = pendingShare; resetExcelBtn();
-      navigator.share({files: [f]}).then(() => toast('Spreadsheet ready.')).catch(() => {});
+      const f = pendingShare; resetExportBtn();
+      navigator.share({files: [f]}).then(() => toast('Export ready.')).catch(() => {});
       return;
     }
-    const withCosts = excelCosts.checked;
-    const slug = suggestedName().replace(/\.json$/, '');
-    excelBtn.disabled = true; excelBtn.textContent = 'Building spreadsheet…';
+    if (exportMenu.hidden) openMenu(); else closeMenu(false);
+  });
+  exportMenu.addEventListener('keydown', e => {
+    const items = Array.from(exportMenu.querySelectorAll('[role="menuitem"]'));
+    const i = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown'){ e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    else if (e.key === 'ArrowUp'){ e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+    else if (e.key === 'Escape'){ e.preventDefault(); closeMenu(true); }
+    else if (e.key === 'Tab') closeMenu(false);
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('.menu-wrap')) closeMenu(false); });
+
+  exportMenu.addEventListener('click', async e => {
+    const item = e.target.closest('[data-export]');
+    if (!item) return;
+    closeMenu(false);
+    const kind = item.dataset.export, withCosts = exportCosts.checked;
+    const base = suggestedName().replace(/\.json$/, '') + (withCosts ? '' : '-no-costs');
+    exportBtn.disabled = true;
+    exportBtn.textContent = kind === 'pdf' ? 'Making PDF…' : 'Making spreadsheet…';
     try {
-      const blob = await buildWorkbook(withCosts);
-      excelBtn.disabled = false; excelBtn.textContent = 'Export to Excel';
-      await shareOrDownload(new File([blob], `${slug}${withCosts ? '' : '-no-costs'}.xlsx`, {type: XLSX_MIME}));
-    } catch(e){
-      excelBtn.disabled = false; resetExcelBtn();
-      toast('The spreadsheet could not be made. Check you are online the first time you export, then try again.');
+      const file = kind === 'pdf'
+        ? new File([await buildPdf(withCosts)], base + '.pdf', {type: 'application/pdf'})
+        : new File([await buildWorkbook(withCosts)], base + '.xlsx', {type: XLSX_MIME});
+      exportBtn.disabled = false; exportBtn.innerHTML = EXPORT_LABEL;
+      await shareOrDownload(file);
+    } catch(err){
+      exportBtn.disabled = false; resetExportBtn();
+      toast('The export could not be made. If this is the first export on this device, check you are online and try again.');
     }
   });
 
