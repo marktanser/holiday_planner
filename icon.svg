@@ -1,8 +1,48 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#2445c4"/>
-  <rect x="96" y="208" width="132" height="132" rx="24" fill="#ffffff"/>
-  <rect x="240" y="208" width="84" height="132" rx="24" fill="#ffffff" opacity="0.75"/>
-  <rect x="336" y="208" width="80" height="132" rx="24" fill="#ffffff" opacity="0.5"/>
-  <rect x="96" y="364" width="320" height="10" rx="5" fill="#ffffff" opacity="0.45"/>
-  <rect x="96" y="150" width="200" height="22" rx="11" fill="#ffffff" opacity="0.9"/>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f2614a"/><stop offset=".55" stop-color="#ff9e4f"/><stop offset="1" stop-color="#ffd27a"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1fa3a0"/><stop offset="1" stop-color="#0e5f73"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#sky)"/>
+  <circle cx="226" cy="298" r="104" fill="#fff0c2"/>
+  <rect y="352" width="512" height="160" fill="url(#sea)"/>
+  <!-- light on the water -->
+  <g fill="#fff6dc">
+    <rect x="150" y="372" width="160" height="10" rx="5" opacity=".6"/>
+    <rect x="178" y="396" width="104" height="10" rx="5" opacity=".45"/>
+    <rect x="206" y="420" width="48" height="10" rx="5" opacity=".3"/>
+  </g>
+  <g fill="#4a1d4f">
+    <!-- shore -->
+    <path d="M0 352 L0 334 Q 90 326 180 330 L 300 332 Q 330 336 346 352 Z"/>
+    <!-- chedi (spire) -->
+    <path d="M262 334 L266 300 Q 286 262 306 300 L310 334 Z"/>
+    <path d="M280 270 L286 168 L292 270 Z"/>
+    <rect x="276" y="276" width="20" height="8" rx="2"/>
+    <!-- wat hall: body and stacked roofs -->
+    <rect x="128" y="284" width="122" height="50"/>
+    <path d="M104 296 L114 290 L189 222 L264 290 L274 296 L264 296 L189 236 L114 296 Z"/>
+    <path d="M112 292 L189 216 L266 292 Z"/>
+    <path d="M128 262 L189 190 L250 262 Z"/>
+    <path d="M144 236 L189 164 L234 236 Z"/>
+    <!-- chofa finials and upturned eaves -->
+    <path d="M189 166 Q 192 140 206 132 Q 196 146 195 168 Z"/>
+    <path d="M112 292 Q 100 284 98 272 Q 108 282 120 286 Z"/>
+    <path d="M266 292 Q 278 284 280 272 Q 270 282 258 286 Z"/>
+    <path d="M128 262 Q 117 255 115 244 Q 124 253 135 256 Z"/>
+    <path d="M250 262 Q 261 255 263 244 Q 254 253 243 256 Z"/>
+    <!-- island and palm -->
+    <path d="M338 362 Q 404 318 474 362 Z"/>
+    <path d="M414 344 Q 404 296 384 252" fill="none" stroke="#4a1d4f" stroke-width="10" stroke-linecap="round"/>
+    <path d="M384 252 Q 344 232 318 256 Q 348 242 384 258 Z"/>
+    <path d="M384 252 Q 424 228 452 248 Q 422 238 384 258 Z"/>
+    <path d="M384 252 Q 362 212 332 208 Q 364 222 380 256 Z"/>
+    <path d="M384 252 Q 406 212 436 206 Q 406 224 386 256 Z"/>
+    <path d="M384 254 Q 356 266 344 294 Q 362 270 386 258 Z"/>
+    <path d="M384 254 Q 414 264 424 292 Q 406 268 382 258 Z"/>
+  </g>
 </svg>
