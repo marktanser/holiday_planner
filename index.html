@@ -89,16 +89,24 @@ button{-webkit-tap-highlight-color:transparent}
 .tl-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px}
 .hint{font-size:13px;color:var(--muted);margin:0}
 .timeline{position:relative;padding:0 6px}
-.track{display:flex;height:64px;border-radius:8px;overflow:hidden;gap:2px;background:var(--line)}
-.seg{flex-basis:0;min-width:0;background:var(--c);color:#fff;padding:8px 10px;display:flex;flex-direction:column;justify-content:center;overflow:hidden;transition:flex-grow .12s ease}
-.seg b{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.seg span{font-family:var(--mono);font-size:12px;opacity:.9;white-space:nowrap}
+.track{display:flex;height:64px;border-radius:8px;overflow:hidden;background:var(--line)}
+/* Segments carry no padding so their widths stay exactly proportional to nights and line up with the
+   dividers. The inner box holds the padding that keeps the words clear of the dividers. */
+.seg{flex:1 1 0;min-width:0;padding:0;background:var(--c);color:#fff;overflow:hidden;transition:flex-grow .12s ease}
+.seg-in{height:100%;padding:8px 14px;display:flex;flex-direction:column;justify-content:center;min-width:0}
+.seg b,.seg span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seg b{font-weight:600;font-size:14px}
+.seg span{font-family:var(--mono);font-size:12px;opacity:.9}
+.seg.tight .seg-in{padding:8px 8px;align-items:center}
+.seg.tight b{display:none}
+.seg.tiny span{display:none}
 .bar{position:relative}
 .handles{position:absolute;inset:0;pointer-events:none}
 .legmarks{position:relative;height:22px;margin-bottom:6px}
 .legmark{position:absolute;top:0;transform:translateX(-50%);font-size:11px;font-weight:600;line-height:18px;padding:0 7px;border-radius:999px;background:var(--field);border:1px solid var(--line);color:var(--ink);white-space:nowrap;max-width:110px;overflow:hidden;text-overflow:ellipsis}
 .legmark.first{transform:none}
 .legmark.last{transform:translateX(-100%)}
+.legmark.dot{width:9px;height:9px;padding:0;top:5px;font-size:0;background:var(--muted);border-color:var(--muted);transform:translateX(-50%)}
 .drag-tip{z-index:2}
 
 /* Travel legs */
@@ -602,11 +610,31 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
   let drag = null;
   let focusHandle = null;
 
+  // Short stays show less text so the dividers never cover it, and travel labels that would
+  // run into each other shrink to dots (tap and hold or hover a dot to see its full label).
+  function fitTimelineText(){
+    els.track.querySelectorAll('.seg').forEach(seg => {
+      const w = seg.getBoundingClientRect().width;
+      const b = seg.querySelector('b');
+      seg.classList.remove('tight', 'tiny');
+      if (w < 40) seg.classList.add('tight', 'tiny');
+      else if (w < 64 || (b && b.scrollWidth > b.clientWidth && w < 90)) seg.classList.add('tight');
+    });
+    // Any label that would touch a neighbour becomes a dot centred on its changeover.
+    const marks = Array.from(els.legmarks.querySelectorAll('.legmark'));
+    marks.forEach(mk => mk.classList.remove('dot'));
+    const boxes = marks.map(mk => mk.getBoundingClientRect());
+    marks.forEach((mk, i) => {
+      const clash = (i > 0 && boxes[i].left < boxes[i-1].right + 4) || (i < marks.length - 1 && boxes[i].right + 4 > boxes[i+1].left);
+      if (clash) mk.classList.add('dot');
+    });
+  }
+
   function renderTimeline(d){
     const N = d.total;
     els.track.innerHTML = d.rows.map(r =>
       `<div class="seg" style="--c:${r.stop.color};flex-grow:${r.stop.nights}" title="${esc(r.stop.name)}: ${plural(r.stop.nights,'night')}">
-        <b>${esc(r.stop.name || 'Untitled')}</b><span>${r.stop.nights}n</span></div>`).join('');
+        <div class="seg-in"><b>${esc(r.stop.name || 'Untitled')}</b><span>${r.stop.nights}n</span></div></div>`).join('');
 
     // Handles
     let h = '';
@@ -632,6 +660,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
     d.rows.forEach((r, i) => mark(r.stop.legs, r.before / N * 100, i === 0 ? 'first' : ''));
     mark(state.returnLegs, 100, 'last');
     els.legmarks.innerHTML = lm;
+    fitTimelineText();
 
     // Axis
     let a = '';
