@@ -37,3 +37,7 @@ Untick **Include costs** first for versions without prices or totals, for exampl
 ## Updating the app
 
 Upload a new `index.html` over the old one. Devices pick it up the next time they open the app online. If you change the icons, also change `CACHE` at the top of `sw.js` (for example to `holiday-planner-v2`).
+
+## iPhone and iPad app
+
+The `ios` folder holds a native SwiftUI version that opens and saves the same plan files. See `ios/README.md` to build and install it with Xcode.
